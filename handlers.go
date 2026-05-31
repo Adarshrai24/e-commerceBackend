@@ -4,7 +4,21 @@ import (
 	"net/http"
 	"encoding/json"
 	"strconv"
+	"errors"
 )
+
+func ValidateProduct(product Product) error {
+	if product.Name == "" {
+		return errors.New("name is required")
+	}
+	if product.Price < 0 {
+		return errors.New("price cannot be negative")
+	}
+	if product.Stock < 0 {
+		return errors.New("stock cannot be negative")
+	}
+	return nil
+}
 
 func GetProduct(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")	
@@ -44,8 +58,12 @@ func PostProduct(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Invalid input", http.StatusBadRequest)
 		return
+	}	
+	er := ValidateProduct(newProduct)
+	if er != nil {
+		http.Error(w, er.Error(), http.StatusBadRequest)
+		return
 	}
-
 	newProduct.ID = len(mockProducts) + 1
 	mockProducts = append(mockProducts, newProduct)
 	w.Header().Set("Content-Type", "application/json")
@@ -67,6 +85,12 @@ func UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	er := json.NewDecoder(r.Body).Decode(&updatedProduct)
 	if er != nil {
 		http.Error(w, "Invalid Input", http.StatusBadRequest)
+		return
+	}
+	
+	err = ValidateProduct(updatedProduct)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
