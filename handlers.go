@@ -59,8 +59,7 @@ func GetProduct(w http.ResponseWriter, r *http.Request) {
 
 func GetProductById(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	idString := r.PathValue("id")
-	id, err := strconv.Atoi(idString)
+	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
@@ -100,8 +99,7 @@ func PostProduct(w http.ResponseWriter, r *http.Request) {
 
 func UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	idString := r.PathValue("id")
-	id, err := strconv.Atoi(idString)
+	id, err := strconv.Atoi(r.PathValue("id"))
 
 	if err != nil {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
@@ -135,8 +133,7 @@ func UpdateProduct(w http.ResponseWriter, r *http.Request) {
 
 func DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	idString := r.PathValue("id")
-	id, err := strconv.Atoi(idString)
+	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
 		return
