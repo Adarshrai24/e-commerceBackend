@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"errors"
 	"time"
+	"database/sql"
 )
 
 func ValidateProduct(product Product) error {
@@ -50,11 +51,39 @@ func ValidateCreateOrder(req CreateOrderRequest) error {
 func GetProduct(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")	
 
-	err := json.NewEncoder(w).Encode(mockProducts)
+	rows, err := db.Query(`
+		SELECT id, name, description, price, stock 
+		FROM products
+	`)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	defer rows.Close()	
+
+	var products []Product 
+	for rows.Next() {
+		var p Product 
+		err := rows.Scan(
+			&p.ID, &p.Name, &p.Description, &p.Price, &p.Stock,
+		)
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		products = append(products, p)
+	}
+
+	err = json.NewEncoder(w).Encode(products)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func GetProductById(w http.ResponseWriter, r *http.Request) {
@@ -63,19 +92,36 @@ func GetProductById(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
-	} else {
-		for _, i := range mockProducts {
-			if i.ID == id {
-				er := json.NewEncoder(w).Encode(i)
-				if er != nil {
-					http.Error(w, er.Error(), http.StatusInternalServerError)
-					return
-				}
-				return
-			}
-		}
+	} 
+	
+	row := db.QueryRow(
+		`SELECT * FROM products
+		WHERE id = $1
+		`,
+		id, 
+	)
+	
+	var p Product 
+	err = row.Scan(
+		&p.ID, &p.Name, &p.Description, &p.Price, &p.Stock,
+	)
+
+	if err == sql.ErrNoRows {
 		http.Error(w, "Product not found", http.StatusNotFound)
+		return
 	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(p)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func PostProduct(w http.ResponseWriter, r *http.Request) {
@@ -90,11 +136,32 @@ func PostProduct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, er.Error(), http.StatusBadRequest)
 		return
 	}
-	newProduct.ID = len(mockProducts) + 1
-	mockProducts = append(mockProducts, newProduct)
+
+	err = db.QueryRow(
+		`
+		INSERT INTO products
+		(name, description, price, stock)
+		VALUES($1, $2, $3, $4)
+		RETURNING id
+		`,
+		newProduct.Name,
+		newProduct.Description,
+		newProduct.Price,
+		newProduct.Stock,
+	).Scan(&newProduct.ID)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newProduct)
+	err = json.NewEncoder(w).Encode(newProduct)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func UpdateProduct(w http.ResponseWriter, r *http.Request) {
@@ -119,16 +186,42 @@ func UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for idx, i := range mockProducts {
-		if i.ID == id {
-			updatedProduct.ID = id
-			mockProducts[idx] = updatedProduct
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(updatedProduct)
-			return
-		}
+	result, err := db.Exec(
+		`
+		UPDATE products
+		SET 
+			name = $1,
+			description = $2,
+			price = $3,
+			stock = $4
+		WHERE id = $5
+		`,
+		updatedProduct.Name,
+		updatedProduct.Description,
+		updatedProduct.Price,
+		updatedProduct.Stock,
+		id,
+	)	
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	http.Error(w, "ID not found", http.StatusNotFound)
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if rowsAffected == 0 {
+		http.Error(w, "product not found", http.StatusNotFound)
+		return
+	}
+	updatedProduct.ID = id
+	w.WriteHeader(http.StatusOK)
+	err = json.NewEncoder(w).Encode(updatedProduct)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}	
 }
 
 func DeleteProduct(w http.ResponseWriter, r *http.Request) {
@@ -138,73 +231,113 @@ func DeleteProduct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
 		return
 	}
+	
+	result, err := db.Exec(
+		`
+		DELETE FROM products 
+		WHERE id = $1
+		`,
+		id,
+	)
 
-	for idx, i := range mockProducts {
-		if i.ID == id {
-			var afterDeleteProduct []Product 
-			afterDeleteProduct = append(afterDeleteProduct, mockProducts[:idx]...)
-			if idx+1 < len(mockProducts) {
-				afterDeleteProduct = append(afterDeleteProduct, mockProducts[idx+1:]...)
-			}
-			mockProducts = afterDeleteProduct
-			w.WriteHeader(http.StatusNoContent)
-			json.NewEncoder(w).Encode(mockProducts)
-			return
-		}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	http.Error(w, "ID not found", http.StatusNotFound)
-}
-
-func GetOrder(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	err := json.NewEncoder(w).Encode(mockOrders)
+	
+	rowsAffected, err := result.RowsAffected()
+	
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if rowsAffected == 0 {
+		http.Error(w, "product not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
+func GetOrder(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	rows, err := db.Query(`
+		SELECT *
+		FROM order_items
+	`)
+	
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var order_items []OrderItem 
+
+	for rows.Next() {
+		var o OrderItem 
+		err := rows.Scan(
+			&o.ID, &o.OrderID, &o.ProductID, &o.Quantity, &o.Price,
+		)
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		order_items = append(order_items, o)
+	}
+
+	err = json.NewEncoder(w).Encode(order_items)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func GetOrderById(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	idString := r.PathValue("id")
-
-	id, err := strconv.Atoi(idString)
+	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
 
-	for _, order := range mockOrders {
-		if order.ID != id {
-			continue
-		}
+	row := db.QueryRow(
+		`SELECT * FROM order_items
+		WHERE id = $1
+		`,
+		id, 
+	)
+	
+	var o OrderItem
+	err = row.Scan(
+		&o.ID, &o.OrderID, &o.ProductID, &o.Quantity, &o.Price,
+	)
 
-		var items []OrderItem
-
-		for _, item := range mockOrderItems {
-			if item.OrderID == id {
-				items = append(items, item)
-			}
-		}
-
-		response := OrderResponse{
-			ID:          order.ID,
-			TotalAmount: order.TotalAmount,
-			CreatedAt:   order.CreatedAt,
-			Items:       items,
-		}
-
-		err = json.NewEncoder(w).Encode(response)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-
+	if err == sql.ErrNoRows {
+		http.Error(w, "order not found", http.StatusNotFound)
 		return
 	}
 
-	http.Error(w, "order not found", http.StatusNotFound)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(o)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func PostOrder(w http.ResponseWriter, r *http.Request) {
@@ -223,70 +356,126 @@ func PostOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	defer tx.Rollback()
 
 	var totalAmount float64
-
+	var quantities []int // to store quantity such that we don't have to call db to get this info
+	var prices []float64 // to store prices 
 	for _, item := range orderItems.Items {
-		productFound := false
-
-		for _, product := range mockProducts {
-			if item.ProductID == product.ID {
-				productFound = true
-
-				if item.Quantity > product.Stock {
-					http.Error(w, "product out of stock", http.StatusBadRequest)
-					return
-				}
-
-				totalAmount += product.Price * float64(item.Quantity)
-				break
-			}
-		}
-
-		if !productFound {
+		id := item.ProductID
+		var p Product
+		err = tx.QueryRow(
+			`
+			SELECT * FROM products
+			WHERE id = $1;
+			`,
+			id,
+		).Scan(
+			&p.ID, 
+			&p.Name,
+			&p.Description,
+			&p.Price,
+			&p.Stock,
+		)
+			
+		if err == sql.ErrNoRows {
 			http.Error(w, "product not found", http.StatusNotFound)
 			return
 		}
-	}
 
-	for _, item := range orderItems.Items {
-		for idx := range mockProducts {
-			if mockProducts[idx].ID == item.ProductID {
-				mockProducts[idx].Stock -= item.Quantity
-				break
-			}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
+
+		if item.Quantity > p.Stock {
+			http.Error(w, "Product out of stock", http.StatusBadRequest)
+			return
+		}
+		quantities = append(quantities, p.Stock)	
+		prices = append(prices, p.Price)
+		totalAmount += p.Price * float64(item.Quantity)
 	}
 
-	newOrderID := len(mockOrders) + 1
+	for idx, item := range orderItems.Items {
+		q := quantities[idx] - item.Quantity
+		_, err := tx.Exec(
+			`
+			UPDATE products
+			SET 
+				stock = $1
+			WHERE id = $2
+			`,
+			q,
+			item.ProductID,
+		)	
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}	
+	}
 
 	newOrder := Order{
-		ID:          newOrderID,
 		TotalAmount: totalAmount,
 		CreatedAt:   time.Now(),
 	}
 
-	mockOrders = append(mockOrders, newOrder)
+	err = tx.QueryRow(
+		`
+		INSERT INTO orders
+		(total_amount, created_at)
+		VALUES($1, $2)
+		RETURNING id
+		`,
+		newOrder.TotalAmount,
+		newOrder.CreatedAt,
+	).Scan(&newOrder.ID)
 
-	for _, item := range orderItems.Items {
-		var price float64
-
-		for _, product := range mockProducts {
-			if product.ID == item.ProductID {
-				price = product.Price
-				break
-			}
-		}
-
-		mockOrderItems = append(mockOrderItems, OrderItem{
-			ID:        len(mockOrderItems) + 1,
-			OrderID:   newOrderID,
-			ProductID: item.ProductID,
-			Quantity:  item.Quantity,
-			Price:     price,
-		})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
+	for idx, item := range orderItems.Items {
+		price := prices[idx]	
+		order := OrderItem{
+			OrderID: newOrder.ID,
+			ProductID: item.ProductID,
+			Quantity: item.Quantity,
+			Price: price,
+		}
+
+			err = tx.QueryRow(
+			`
+			INSERT INTO order_items
+			(order_id, product_id, quantity, price)
+			VALUES($1, $2, $3, $4)
+			RETURNING id
+			`,
+			order.OrderID,
+			order.ProductID,
+			order.Quantity,
+			order.Price,
+		).Scan(&order.ID)
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	
+	err = tx.Commit()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 
 	err = json.NewEncoder(w).Encode(newOrder)
@@ -324,75 +513,125 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	itemFound := false
-
-	for idx := range mockOrderItems {
-		item := &mockOrderItems[idx]
-
-		if item.OrderID == orderId && item.ProductID == productId {
-			itemFound = true
-
-			currentQuantity := item.Quantity
-			updatedQuantity := updatedOrderItem.Quantity
-			requiredQuantity := updatedQuantity - currentQuantity
-
-			productFound := false
-
-			for j := range mockProducts {
-				product := &mockProducts[j]
-
-				if product.ID == productId {
-					productFound = true
-
-					if requiredQuantity > product.Stock {
-						http.Error(w, "product out of stock", http.StatusBadRequest)
-						return
-					}
-
-					product.Stock -= requiredQuantity
-					break
-				}
-			}
-
-			if !productFound {
-				http.Error(w, "product not found", http.StatusNotFound)
-				return
-			}
-
-			item.Quantity = updatedQuantity
-			break
-		}
-	}
-
-	if !itemFound {
-		http.Error(w, "order item not found", http.StatusNotFound)
+	tx, err := db.Begin();
+	if (err != nil) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	defer tx.Rollback()
+	var currentQuantity int 
+	var currentStock int 
+	err = tx.QueryRow(
+		`
+		SELECT quantity FROM order_items
+		WHERE order_id = $1 and product_id = $2
+		`,
+		orderId,
+		productId,
+	).Scan(
+		&currentQuantity,
+	)
+	if err == sql.ErrNoRows {
+		http.Error(w, "No such order found", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	err = tx.QueryRow(
+		`
+		SELECT stock from products
+		WHERE id = $1
+		`,
+		productId,
+	).Scan(
+		&currentStock, 
+	)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "No such product found", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	requiredQuantity := updatedOrderItem.Quantity - currentQuantity
+	if (requiredQuantity > currentStock) {
+		http.Error(w, "Item out of stock", http.StatusBadRequest)
+		return
+	}
+	
+	_, err = tx.Exec(
+		`
+		UPDATE order_items
+		SET
+			quantity = $1
+		WHERE order_id = $2 and product_id = $3
+		`,
+		updatedOrderItem.Quantity,
+		orderId,
+		productId,
+	)	
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	var totalAmount float64
 
-	for _, item := range mockOrderItems {
-		if item.OrderID == orderId {
-			totalAmount += item.Price * float64(item.Quantity)
-		}
+	err = tx.QueryRow(
+		`
+		SELECT COALESCE(SUM(quantity * price), 0)
+		FROM order_items
+		WHERE order_id = $1
+		`,
+		orderId,
+	).Scan(&totalAmount)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_, err = tx.Exec(
+		`
+		UPDATE products
+		SET	
+			stock = $1
+		WHERE id = $2
+		`,
+		currentStock - requiredQuantity,
+		productId,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}	
+	
+	_, err = tx.Exec(
+		`
+		UPDATE orders
+		SET 
+			total_amount = $1
+		WHERE id = $2
+		`,
+		totalAmount,
+		orderId,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	for idx := range mockOrders {
-		if mockOrders[idx].ID == orderId {
-			mockOrders[idx].TotalAmount = totalAmount
-
-			w.WriteHeader(http.StatusOK)
-
-			err = json.NewEncoder(w).Encode(mockOrders[idx])
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-
-			return
-		}
+	err = tx.Commit()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-
-	http.Error(w, "order not found", http.StatusNotFound)
+	w.WriteHeader(http.StatusOK)
 }
 
 func DeleteOrder(w http.ResponseWriter, r *http.Request) {
@@ -402,52 +641,120 @@ func DeleteOrder(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "invalid order id", http.StatusBadRequest)
 		return
+	}	
+	
+	tx, err := db.Begin()
+
+	if (err != nil) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+	defer tx.Rollback()	
 
-	orderFound := false
+	var updatedOrderItems []OrderItem
+	
+	rows, err := tx.Query(
+		`
+		SELECT * FROM order_items
+		WHERE order_id = $1
+		`,
+		orderID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
 
-	for _, order := range mockOrders {
-		if order.ID == orderID {
-			orderFound = true
-			break
+	for rows.Next() {
+		var item OrderItem
+		err := rows.Scan(
+			&item.ID, &item.OrderID, &item.ProductID, &item.Quantity, &item.Price,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
+		updatedOrderItems = append(updatedOrderItems, item)
 	}
-
-	if !orderFound {
-		http.Error(w, "order not found", http.StatusNotFound)
+	if err := rows.Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(updatedOrderItems) == 0 {
+		http.Error(w, "No such orders found", http.StatusBadRequest)
 		return
 	}
 
-	for _, item := range mockOrderItems {
-		if item.OrderID == orderID {
-			for idx := range mockProducts {
-				if mockProducts[idx].ID == item.ProductID {
-					mockProducts[idx].Stock += item.Quantity
-					break
-				}
-			}
+	for _, item := range updatedOrderItems {
+		var currentStock int 
+		err = tx.QueryRow(
+			`
+			SELECT stock FROM products 
+			WHERE id = $1
+			`,
+			item.ProductID,
+		).Scan(
+			&currentStock,
+		)
+		if err == sql.ErrNoRows {
+			http.Error(w, "No such product found", http.StatusBadRequest)
+			return
+		}
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		updatedStock := currentStock + item.Quantity
+
+		_, err = tx.Exec(
+			`
+			UPDATE products 
+			SET 
+				stock = $1
+			WHERE id = $2
+			`,
+			updatedStock,
+			item.ProductID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 	}
+	
+	_, err = tx.Exec(
+		`
+		DELETE FROM order_items 
+		WHERE order_id = $1
+		`,
+		orderID,
+	)
 
-	var updatedOrderItems []OrderItem
-
-	for _, item := range mockOrderItems {
-		if item.OrderID != orderID {
-			updatedOrderItems = append(updatedOrderItems, item)
-		}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	mockOrderItems = updatedOrderItems
-
-	var updatedOrders []Order
-
-	for _, order := range mockOrders {
-		if order.ID != orderID {
-			updatedOrders = append(updatedOrders, order)
-		}
+	_, err = tx.Exec(
+		`
+		DELETE FROM orders 
+		WHERE id = $1
+		`,
+		orderID, 
+	)
+	
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	mockOrders = updatedOrders
-
+	err = tx.Commit()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
