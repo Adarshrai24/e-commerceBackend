@@ -50,6 +50,9 @@ func main() {
 	mux.HandleFunc("POST /orders", handlers.PostOrder)
 	mux.HandleFunc("PATCH /orders/{orderId}/products/{productId}", handlers.UpdateOrder)	
 	mux.HandleFunc("DELETE /orders/{id}", handlers.DeleteOrder)
+	mux.HandleFunc("GET /cart", handlers.GetCart)
+	mux.HandleFunc("GET /cart/{idx}", handlers.GetCartByID)
+	mux.HandleFunc("POST /cart/", handlers.PostCart)
 	log.Println("Server running on :8080")
 
 	err = http.ListenAndServe(":8080", mux)

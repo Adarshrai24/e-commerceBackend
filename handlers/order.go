@@ -227,7 +227,7 @@ func PostOrder(w http.ResponseWriter, r *http.Request) {
 			Price: price,
 		}
 
-			err = tx.QueryRow(
+		err = tx.QueryRow(
 			`
 			INSERT INTO order_items
 			(order_id, product_id, quantity, price)
