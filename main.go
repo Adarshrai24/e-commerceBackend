@@ -45,14 +45,18 @@ func main() {
 	mux.HandleFunc("POST /products", handlers.PostProduct)
 	mux.HandleFunc("PUT /products/{id}", handlers.UpdateProduct)
 	mux.HandleFunc("DELETE /products/{id}", handlers.DeleteProduct)
+	
 	mux.HandleFunc("GET /orders", handlers.GetOrder)
 	mux.HandleFunc("GET /orders/{id}", handlers.GetOrderById)
-	mux.HandleFunc("POST /orders", handlers.PostOrder)
-	mux.HandleFunc("PATCH /orders/{orderId}/products/{productId}", handlers.UpdateOrder)	
-	mux.HandleFunc("DELETE /orders/{id}", handlers.DeleteOrder)
-	mux.HandleFunc("GET /cart", handlers.GetCart)
-	mux.HandleFunc("GET /cart/{idx}", handlers.GetCartByID)
-	mux.HandleFunc("POST /cart/", handlers.PostCart)
+	
+	mux.HandleFunc("GET /carts", handlers.GetCart)
+	mux.HandleFunc("GET /carts/{id}", handlers.GetCartByID)
+	mux.HandleFunc("POST /carts/", handlers.PostCart)
+	mux.HandleFunc("PATCH /carts/{cartID}/products/{productID}", handlers.UpdateCart)
+	mux.HandleFunc("DELETE /carts/{id}", handlers.DeleteCart)
+	mux.HandleFunc("DELETE /carts/{cartID}/products/{productID}", handlers.DeleteProductFromCart)
+
+	mux.HandleFunc("POST /carts/{id}/checkout", handlers.CheckoutFromCart)
 	log.Println("Server running on :8080")
 
 	err = http.ListenAndServe(":8080", mux)
