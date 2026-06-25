@@ -44,7 +44,7 @@ func GetCart(w http.ResponseWriter, r *http.Request) {
 	
 	rows, err := db.DB.Query(
 		`
-		SELECT * FROM order_items 
+		SELECT * FROM cart_items 
 		`,
 	)
 
@@ -92,7 +92,7 @@ func GetCartByID(w http.ResponseWriter, r *http.Request) {
 	
 	rows, err := db.DB.Query(
 		`
-		SELECT * FROM order_items 
+		SELECT * FROM cart_items 
 		WHERE cart_id = $1
 		`,
 		cartId,
@@ -238,13 +238,13 @@ func PostCart(w http.ResponseWriter, r *http.Request) {
 func UpdateCart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	cartID, err := strconv.Atoi(r.PathValue("cartId"))
+	cartID, err := strconv.Atoi(r.PathValue("cartID"))
 	if err != nil {
 		http.Error(w, "invalid cart id", http.StatusBadRequest)
 		return
 	}
 
-	productID, err := strconv.Atoi(r.PathValue("productId"))
+	productID, err := strconv.Atoi(r.PathValue("productID"))
 	if err != nil {
 		http.Error(w, "invalid product id", http.StatusBadRequest)
 		return

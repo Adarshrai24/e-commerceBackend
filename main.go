@@ -51,12 +51,12 @@ func main() {
 	
 	mux.HandleFunc("GET /carts", handlers.GetCart)
 	mux.HandleFunc("GET /carts/{id}", handlers.GetCartByID)
-	mux.HandleFunc("POST /carts/", handlers.PostCart)
+	mux.HandleFunc("POST /carts", handlers.PostCart)
 	mux.HandleFunc("PATCH /carts/{cartID}/products/{productID}", handlers.UpdateCart)
-	mux.HandleFunc("DELETE /carts/{id}", handlers.DeleteCart)
+	mux.HandleFunc("DELETE /carts/{cartID}", handlers.DeleteCart)
 	mux.HandleFunc("DELETE /carts/{cartID}/products/{productID}", handlers.DeleteProductFromCart)
 
-	mux.HandleFunc("POST /carts/{id}/checkout", handlers.CheckoutFromCart)
+	mux.HandleFunc("POST /carts/{cartID}/checkout", handlers.CheckoutFromCart)
 	log.Println("Server running on :8080")
 
 	err = http.ListenAndServe(":8080", mux)
