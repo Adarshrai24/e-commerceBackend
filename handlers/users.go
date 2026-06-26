@@ -6,40 +6,40 @@ import (
 	"strconv"
 	"database/sql"
 	"ecommerce_api/models"
-	"ecommerce_api/db"
 )
 
-func GetOrder(w http.ResponseWriter, r *http.Request) {
+func GetUsers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	rows, err := db.DB.Query(`
-		SELECT *
-		FROM orders
-	`)
-	
+	var users []models.User 
+
+	rows, err := db.DB.Query(
+		`
+		SELECT * FROM users 
+		`,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
-	var order []models.Order
-
 	for rows.Next() {
-		var o models.Order
-		err := rows.Scan(
-			&o.ID, &o.UserID, &o.TotalAmount, &o.CreatedAt,
-		)
-
+		var u models.User 
+		err = rows.Scan(&u.ID, &u.Name, &u.Email, &u.UserName, &u.Address)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		order = append(order, o)
+		users = append(users, u)
 	}
 
-	err = json.NewEncoder(w).Encode(order)
+	if len(users) == 0 {
+		http.Error(w, "No users present currently", http.StatusBadRequest)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(users)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -48,42 +48,35 @@ func GetOrder(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func GetOrderById(w http.ResponseWriter, r *http.Request) {
+func GetUserById(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	id, err := strconv.Atoi(r.PathValue("id"))
+	userID, err := strconv.Atoi(r.PathValue("userID"))
 	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
+		http.Error(w, "Invalid user id", http.StatusBadRequest)
 		return
 	}
 
-	row := db.DB.QueryRow(
-		`SELECT * FROM order_items
+	var users models.User
+
+	err := db.DB.QueryRow(
+		`
+		SELECT * FROM users 
 		WHERE id = $1
 		`,
-		id, 
+		userID,
+	).Scan(
+		&users.ID, &users.Name, &users.Email, &users.UserName, &users.Address
 	)
-	
-	var o models.OrderItem
-	err = row.Scan(
-		&o.ID, &o.OrderID, &o.ProductID, &o.Quantity, &o.Price,
-	)
-
-	if err == sql.ErrNoRows {
-		http.Error(w, "order not found", http.StatusNotFound)
-		return
-	}
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(o)
+	err = json.NewEncoder(w).Encode(users)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 }
-

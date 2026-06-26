@@ -40,11 +40,11 @@ func ValidateCreateCart(req models.CreateCartRequest) error {
 func GetCart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	
-	var cartItems []models.CartItem 
+	var cart []models.Cart
 	
 	rows, err := db.DB.Query(
 		`
-		SELECT * FROM cart_items 
+		SELECT * FROM cart 
 		`,
 	)
 
@@ -55,22 +55,22 @@ func GetCart(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var c models.CartItem
+		var c models.Cart
 		err = rows.Scan(
-			&c.ID, &c.CartID, &c.ProductID, &c.Quantity,
+			&c.ID, &c.UserID
 		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		cartItems = append(cartItems, c)
+		cart = append(cart, c)
 	}
 	
-	if (len(cartItems) == 0) {
+	if (len(cart) == 0) {
 		http.Error(w, "Cart is empty", http.StatusBadRequest)
 		return
 	}
-	err = json.NewEncoder(w).Encode(cartItems)
+	err = json.NewEncoder(w).Encode(cart)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
