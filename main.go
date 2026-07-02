@@ -57,6 +57,12 @@ func main() {
 	mux.HandleFunc("DELETE /carts/{cartID}/products/{productID}", handlers.DeleteProductFromCart)
 
 	mux.HandleFunc("POST /carts/{cartID}/checkout", handlers.CheckoutFromCart)
+	
+	mux.HandleFunc("GET /users", handlers.GetUsers)
+	mux.HandleFunc("GET /users/{userID}", handlers.GetUserById)
+	mux.HandleFunc("POST /users", handlers.PostUser)
+	mux.HandleFunc("PUT /users/{userID}", handlers.UpdateUser)
+	mux.HandleFunc("DELETE /users/{userID}", handlers.DeleteUser)
 	log.Println("Server running on :8080")
 
 	err = http.ListenAndServe(":8080", mux)

@@ -44,7 +44,7 @@ func GetCart(w http.ResponseWriter, r *http.Request) {
 	
 	rows, err := db.DB.Query(
 		`
-		SELECT * FROM cart 
+		SELECT * FROM carts
 		`,
 	)
 
@@ -57,7 +57,7 @@ func GetCart(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var c models.Cart
 		err = rows.Scan(
-			&c.ID, &c.UserID
+			&c.ID, &c.UserID,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
